@@ -1,0 +1,7 @@
+<?php
+
+enum TestEnum: string
+{
+    case EITHER = 'either';
+    case OTHER = 'other';
+}
