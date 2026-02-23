@@ -691,8 +691,25 @@ int msgpack_unserialize_map_item(msgpack_unpack_data *unpack, zval **container, 
                         "[msgpack] (%s) Class %s is an Enum and not supported below PHP 8.1",
                         __FUNCTION__, Z_STRVAL_P(key));
 #else
+                    /* ensure we don't leak a previous value */
+                    if (container != NULL) {
+                        zval_ptr_dtor(*container);
+                    }
+
                     ce = msgpack_unserialize_class(container, Z_STR_P(key), 0);
+                    if (ce == NULL) {
+                        /* class load failed; leave container as isset and bail out */
+                        MSGPACK_UNSERIALIZE_FINISH_MAP_ITEM(unpack, key, val);
+                        return 0;
+                    }
+
                     zend_object *enum_instance = zend_enum_get_case(ce, Z_STR_P(val));
+                    /* we must bump the reference count, otherwise unsetting the
+                     * zval returned to user will destroy the shared enum case
+                     * object.  Failure to do so leads to heap corruption when the
+                     * original object still contains the case and is later
+                     * serialized again (see issue #181). */
+                    GC_ADDREF(enum_instance);
                     ZVAL_OBJ(*container, enum_instance);
 #endif
                     MSGPACK_UNSERIALIZE_FINISH_MAP_ITEM(unpack, key, val);
