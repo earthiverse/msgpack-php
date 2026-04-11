@@ -692,6 +692,26 @@ int msgpack_unserialize_map_item(msgpack_unpack_data *unpack, zval **container, 
                         __FUNCTION__, Z_STRVAL_P(key));
 #else
                     ce = msgpack_unserialize_class(container, Z_STR_P(key), 0);
+                    /* Enums are not allowed to implement Serializable nor __unserialize */
+                    if (ce == NULL || ce == PHP_IC_ENTRY) {
+                        MSGPACK_WARNING(
+                            "[msgpack] (%s) Enum definition %s could not be loaded",
+                            __FUNCTION__, Z_STRVAL_P(key));
+
+                        MSGPACK_UNSERIALIZE_FINISH_MAP_ITEM(unpack, key, val);
+                        return 0;
+                    }
+
+                    /* found class is not an Enum but a normal Class */
+                    if (!(ce->ce_flags & ZEND_ACC_ENUM)) {
+                        MSGPACK_WARNING(
+                            "[msgpack] (%s) Class %s is expected to be an Enum",
+                            __FUNCTION__, ZSTR_VAL(ce->name));
+
+                        MSGPACK_UNSERIALIZE_FINISH_MAP_ITEM(unpack, key, val);
+                        return 0;
+                    }
+
                     zend_object *enum_instance = zend_enum_get_case(ce, Z_STR_P(val));
                     ZVAL_OBJ(*container, enum_instance);
 #endif
